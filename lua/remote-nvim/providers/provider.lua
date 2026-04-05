@@ -799,7 +799,7 @@ function Provider:_wait_for_server_to_be_ready()
   local cmd = ("nvim --server localhost:%s --remote-send ':lua vim.g.remote_neovim_host=true<CR>'"):format(
     self._local_free_port
   )
-  local timeout = 20000 -- Wait for max 20 seconds for server to get ready
+  local timeout = 60000 -- Wait for max 60 seconds for server to get ready
 
   local timer = utils.uv.new_timer()
   assert(timer ~= nil, "Timer object should not be nil")
@@ -826,9 +826,6 @@ function Provider:_wait_for_server_to_be_ready()
   timer:start(timeout, 0, function()
     timer:stop()
     timer:close()
-    -- Canary: touch a file so we know this exact code path was hit
-    local f = io.open("/tmp/remote_nvim_timer_fired", "w")
-    if f then f:write(tostring(os.time())); f:close() end
     vim.schedule(function()
       vim.notify(("Server did not come up on local in %s ms. Try again :("):format(timeout), vim.log.levels.ERROR)
     end)

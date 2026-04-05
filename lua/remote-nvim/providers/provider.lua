@@ -808,7 +808,7 @@ function Provider:_wait_for_server_to_be_ready()
   local function probe_server_readiness()
     -- This is synchronous but that's fine because the command we are running should immediately return
     local res = vim.fn.system(cmd)
-    if res == "" then
+    if vim.v.shell_error == 0 then
       timer:stop()
       timer:close()
       if co ~= nil and coroutine.status(co) == "suspended" then

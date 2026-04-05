@@ -801,20 +801,29 @@ function Provider:_wait_for_server_to_be_ready()
   )
   local timeout = 60000 -- Wait for max 60 seconds for server to get ready
 
+  local dbg = io.open("/tmp/remote_nvim_probe_debug.log", "w")
+  if dbg then dbg:write("probe start, cmd: " .. cmd .. "\n"); dbg:flush() end
+
   local timer = utils.uv.new_timer()
   assert(timer ~= nil, "Timer object should not be nil")
 
   local co = coroutine.running()
+  if dbg then dbg:write("coroutine: " .. tostring(co) .. ", status: " .. (co and coroutine.status(co) or "nil") .. "\n"); dbg:flush() end
+
   local function probe_server_readiness()
     -- This is synchronous but that's fine because the command we are running should immediately return
     local res = vim.fn.system(cmd)
-    if vim.v.shell_error == 0 then
+    local exit_code = vim.v.shell_error
+    if dbg then dbg:write("probe result: exit=" .. tostring(exit_code) .. ", output_len=" .. #res .. "\n"); dbg:flush() end
+    if exit_code == 0 then
       timer:stop()
       timer:close()
+      if dbg then dbg:write("SUCCESS! co=" .. tostring(co) .. ", status=" .. (co and coroutine.status(co) or "nil") .. "\n"); dbg:flush(); dbg:close() end
       if co ~= nil and coroutine.status(co) == "suspended" then
         coroutine.resume(co)
       end
     else
+      if dbg then dbg:write("RETRY in 2s\n"); dbg:flush() end
       vim.defer_fn(probe_server_readiness, 2000)
       if co ~= nil and coroutine.status(co) == "running" then
         coroutine.yield(co)
@@ -826,6 +835,7 @@ function Provider:_wait_for_server_to_be_ready()
   timer:start(timeout, 0, function()
     timer:stop()
     timer:close()
+    if dbg then dbg:write("TIMEOUT!\n"); dbg:close() end
     vim.schedule(function()
       vim.notify(("Server did not come up on local in %s ms. Try again :("):format(timeout), vim.log.levels.ERROR)
     end)

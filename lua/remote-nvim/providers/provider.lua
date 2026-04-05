@@ -823,12 +823,12 @@ function Provider:_wait_for_server_to_be_ready()
   end
 
   -- Start the timer
-  timer:start(timeout, 0, function()
+  timer:start(timeout, 0, vim.schedule_wrap(function()
     vim.notify(("Server did not come up on local in %s ms. Try again :("):format(timeout), vim.log.levels.ERROR)
     timer:stop()
     timer:close()
     error(("Server did not come up on local in %s ms. Try again :("):format(timeout))
-  end)
+  end))
   probe_server_readiness()
 end
 

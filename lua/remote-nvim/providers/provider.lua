@@ -551,6 +551,98 @@ function Provider:_remote_neovim_binary_dir()
 end
 
 ---@private
+---Prompt the user for an env file path at runtime
+---@return string|nil env_file Path to the env file, or nil if skipped
+function Provider:_get_env_file_path()
+  local choice = self:get_selection({ "Yes", "No" }, {
+    prompt = "Run environment setup (env.yaml / env.sh) on remote?",
+  })
+  if choice ~= "Yes" then return nil end
+
+  -- vim.fn.input is synchronous — safe to call directly here
+  local path = vim.fn.input({
+    prompt = "Path to env file (env.yaml or env.sh): ",
+    completion = "file",
+  })
+
+  if not path or vim.trim(path) == "" then
+    self.progress_viewer:add_progress_node({
+      type = "stdout_node",
+      text = "No env file path provided. Skipping environment setup.",
+    })
+    return nil
+  end
+
+  -- Expand ~ and env vars
+  return vim.fn.expand(vim.trim(path))
+end
+
+---@private
+---Install environment dependencies
+function Provider:_install_env_dependencies()
+  local env_file = remote_nvim.config.env_setup.env_file_path
+
+  -- If not set in config, ask at runtime
+  if not env_file then
+    env_file = self:_get_env_file_path()
+  end
+
+  if not env_file then return end
+
+  -- Expand ~ etc. in case it came from config
+  env_file = vim.fn.expand(env_file)
+
+  -- If the file doesn't exist locally, we can't do anything
+  if vim.fn.filereadable(env_file) == 0 then
+    self.logger.warn("Environment setup file not found locally: " .. env_file)
+    vim.notify("Environment setup file not found locally: " .. env_file, vim.log.levels.WARN)
+    return
+  end
+
+  local ext = vim.fn.fnamemodify(env_file, ":e"):lower()
+
+  if ext == "yaml" or ext == "yml" then
+    local yaml = require("remote-nvim.yaml")
+    local parsed = yaml.parse_minimal_yaml(env_file)
+    if not parsed then
+      self.logger.error("Failed to parse env yaml file: " .. env_file)
+      return
+    end
+
+    local args_t = {}
+    if parsed.APT and #parsed.APT > 0 then
+      table.insert(args_t, "-a '" .. table.concat(parsed.APT, " ") .. "'")
+    end
+    if parsed.CONDA and #parsed.CONDA > 0 then
+      table.insert(args_t, "-c '" .. table.concat(parsed.CONDA, " ") .. "'")
+    end
+    if parsed.PIP and #parsed.PIP > 0 then
+      table.insert(args_t, "-p '" .. table.concat(parsed.PIP, " ") .. "'")
+    end
+
+    if #args_t > 0 then
+      local run_cmd = ("bash %s %s"):format(
+        utils.path_join(self._remote_is_windows, self._remote_scripts_path, "env_setup.sh"),
+        table.concat(args_t, " ")
+      )
+      self:run_command(run_cmd, "Installing environment dependencies (YAML)")
+    end
+
+  elseif ext == "sh" then
+    -- Upload the custom script
+    local remote_sh_path = utils.path_join(self._remote_is_windows, self._remote_scripts_path, vim.fn.fnamemodify(env_file, ":t"))
+    self:upload(env_file, remote_sh_path, "Uploading custom env script")
+
+    local run_cmd = ("chmod +x %s && bash %s"):format(remote_sh_path, remote_sh_path)
+    self:run_command(run_cmd, "Executing custom environment setup script")
+  else
+    self.logger.error("Unsupported env file extension: " .. ext .. " (expected .yaml, .yml, or .sh)")
+    vim.notify("Unsupported env file extension: " .. ext .. " (expected .yaml, .yml, or .sh)\nSkipping environment setup.", vim.log.levels.ERROR)
+  end
+end
+
+
+---@private
 ---Setup remote
 function Provider:_setup_remote()
   if not self._setup_running then
@@ -623,6 +715,9 @@ function Provider:_setup_remote()
 
     -- Set correct permissions and install Neovim
     local install_neovim_cmd = table.concat(install_cmd_lst, " && ")
+
+    -- Install environment dependencies before Neovim
+    self:_install_env_dependencies()
 
     if self.offline_mode and self._remote_neovim_install_method ~= "system" then
       -- We need to ensure that we download Neovim version locally and then push it to the remote

@@ -76,9 +76,13 @@ local utils = require("remote-nvim.utils")
 ---@field copy_dirs remote-nvim.config.PluginConfig.Remote.CopyDirs Which directories should be copied over to the remote
 ---@field app_name string Neovim app name which should be used throughout
 
+---@class remote-nvim.config.PluginConfig.EnvSetupConfig
+---@field env_file_path string? Path to the env file (e.g. env.yaml or env.sh) to run before setting up Neovim
+
 ---@class remote-nvim.config.PluginConfig
 ---@field devpod remote-nvim.config.PluginConfig.DevpodConfig Devcontainer configuration
 ---@field ssh_config remote-nvim.config.PluginConfig.SSHConfig SSH configuration
+---@field env_setup remote-nvim.config.PluginConfig.EnvSetupConfig Environment setup configuration
 ---@field neovim_install_script_path string Local path where neovim installation script is stored
 ---@field neovim_user_config_path string? Local path where the neovim configuration to be copied over to the remote
 ---@field remote remote-nvim.config.PluginConfig.Remote Configurations related to the remote
@@ -201,6 +205,9 @@ M.default_opts = {
     no_github = false,
     ---@diagnostic disable-next-line:param-type-mismatch
     cache_dir = utils.path_join(utils.is_windows, vim.fn.stdpath("cache"), constants.PLUGIN_NAME, "version_cache"),
+  },
+  env_setup = {
+    env_file_path = nil,
   },
   log = {
     ---@diagnostic disable-next-line:param-type-mismatch

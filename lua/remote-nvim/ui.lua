@@ -23,10 +23,8 @@ function M.float_term(cmd, exit_cb, popup_options)
 
   local popup = require("nui.popup")(popup_options)
 
-  -- If we leave the buffer, we close the pop-up
-  popup:on(event.BufLeave, function()
-    popup:unmount()
-  end, { once = true })
+
+
 
   -- Update layout if the overall Neovim gets resized
   popup:on(event.VimResized, function()
@@ -34,6 +32,8 @@ function M.float_term(cmd, exit_cb, popup_options)
   end)
 
   popup:mount()
+
+  local bufnr = vim.api.nvim_get_current_buf()
 
   vim.fn.termopen(cmd, {
     on_exit = function(_, exit_code)
@@ -47,6 +47,14 @@ function M.float_term(cmd, exit_cb, popup_options)
       end
     end,
   })
+
+  -- Mark this buffer so user keymaps can identify and exclude it
+  vim.api.nvim_buf_set_var(bufnr, "remote_nvim_term", true)
+
+  -- Override <Esc> in this terminal buffer so it reaches the remote Neovim
+  -- instead of exiting the local terminal mode
+  vim.keymap.set("t", "<Esc>", "<Esc>", { buffer = bufnr, nowait = true })
+
   vim.cmd.startinsert()
 end
 
